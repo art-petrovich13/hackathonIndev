@@ -1,66 +1,56 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Calendar, MapPin, Clock, User, Mail, CheckCircle, X, ChevronLeft, Stethoscope, Shield, Award } from 'lucide-react';
+import { Calendar, MapPin, Clock, User, Mail, CheckCircle, X, ChevronLeft, Stethoscope, Shield, Award, Car } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import styles from './MedicalExamination.module.scss';
+import styles from './DriverCommission.module.scss';
 import { mockClinics, mockDoctors, mockAppointments } from '../../data/mockData';
 import type { Doctor, Appointment, BookingFormData } from '../../types';
-
-import YandexMapModal from '../../hooks/YandexMapModal';
 
 interface SelectedAppointment {
   appointment: Appointment;
   doctor: Doctor;
 }
 
-const MedicalExamination: React.FC = () => {
+const DriverCommission: React.FC = () => {
   const [selectedClinic, setSelectedClinic] = useState<string>('');
   const [selectedAppointments, setSelectedAppointments] = useState<SelectedAppointment[]>([]);
-  const [bookingForm, setBookingForm] = useState<BookingFormData>({ name: '', email: '', });
+  const [bookingForm, setBookingForm] = useState<BookingFormData>({ 
+    name: '', 
+    email: '', 
+
+  });
   const [isBooked, setIsBooked] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [currentStep, setCurrentStep] = useState<'clinic' | 'doctors' | 'booking'>('clinic');
-  const [isMapModalOpen, setIsMapModalOpen] = useState(false);
 
-  // Единый бесплатный профосмотр
-  const examinationPackage = {
-    name: 'Бесплатный профилактический осмотр',
-    description: 'Комплексное медицинское обследование по полису ОМС',
-    requiredDoctors: ['Терапевт', 'Офтальмолог', 'Невролог', 'Хирург'],
-    duration: '3-4 часа',
-    price: 'Бесплатно по полису ОМС',
+  // Пакет водительской комиссии
+  const commissionPackage = {
+    name: 'Водительская медицинская комиссия',
+    description: 'Обязательное медицинское освидетельствование для получения водительских прав',
+    requiredDoctors: ['Психиатр', 'Нарколог', 'Офтальмолог', 'Терапевт', 'Невролог'],
+    duration: '2-3 часа',
+    price: 'от 50 BYN',
     benefits: [
-      'Полное обследование организма',
-      'Консультации специалистов',
-      'Лабораторные исследования',
-      'Заключение о состоянии здоровья'
+      'Осмотр у всех необходимых специалистов',
+      'Заключение психиатра и нарколога',
+      'Справка установленного образца',
+      'Действительно по всей Беларуси',
+      'Подходит для категорий A, A1, B, B1, BE, M'
+    ],
+    requirements: [
+      'Паспорт гражданина РБ',
+      'Фотография 3x4 см (матовая)',
+      'Военный билет (для военнообязанных)'
     ]
   };
 
-  const handleOpenMap = useCallback(() => {
-    setIsMapModalOpen(true);
-  }, []);
-
-  // Функция для закрытия карты
-  const handleCloseMap = useCallback(() => {
-    setIsMapModalOpen(false);
-  }, []);
-
-  // Функция выбора клиники через карту
-  const handleClinicSelectFromMap = useCallback((clinicId: string) => {
-    setSelectedClinic(clinicId);
-    setSelectedAppointments([]);
-    setCurrentStep('doctors');
-    setIsMapModalOpen(false);
-  }, []);
-
-  // Фильтрация врачей для профосмотра
-  const examinationDoctors = useMemo(() => {
+  // Фильтрация врачей для водительской комиссии
+  const commissionDoctors = useMemo(() => {
     if (!selectedClinic) return [];
     
     return mockDoctors.filter(doctor => 
       doctor.clinicId === selectedClinic &&
-      examinationPackage.requiredDoctors.includes(doctor.specialty)
+      commissionPackage.requiredDoctors.includes(doctor.specialty)
     );
   }, [selectedClinic]);
 
@@ -74,18 +64,12 @@ const MedicalExamination: React.FC = () => {
         new Date(apt.date) >= now
       )
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .slice(0, 5); // Берем 5 ближайших записей
+      .slice(0, 5);
     
     return futureAppointments;
   }, []);
 
   // Получение информации о клинике
-  const getClinicForDoctor = useCallback((doctorId: string) => {
-    const doctor = mockDoctors.find(d => d.id === doctorId);
-    return doctor ? mockClinics.find(c => c.id === doctor.clinicId) : null;
-  }, []);
-
-  // Получение выбранной клиники
   const selectedClinicInfo = useMemo(() => {
     return mockClinics.find(clinic => clinic.id === selectedClinic);
   }, [selectedClinic]);
@@ -100,16 +84,14 @@ const MedicalExamination: React.FC = () => {
   // Выбор времени приема
   const handleAppointmentSelect = useCallback((appointment: Appointment, doctor: Doctor) => {
     setSelectedAppointments(prev => {
-      // Удаляем предыдущую запись к этому врачу, если есть
       const filtered = prev.filter(apt => apt.doctor.id !== doctor.id);
-      // Добавляем новую запись
       return [...filtered, { appointment, doctor }];
     });
   }, []);
 
   // Проверка готовности к бронированию
   const isReadyForBooking = useMemo(() => {
-    return selectedAppointments.length === examinationPackage.requiredDoctors.length;
+    return selectedAppointments.length === commissionPackage.requiredDoctors.length;
   }, [selectedAppointments]);
 
   // Переход к бронированию
@@ -119,11 +101,13 @@ const MedicalExamination: React.FC = () => {
     }
   }, [isReadyForBooking]);
 
-  // Генерация HTML для PDF талона профосмотра
-  const generateExaminationTicketHTML = useCallback((bookingData: {
+  // Генерация HTML для PDF справки водительской комиссии
+  const generateCommissionCertificateHTML = useCallback((bookingData: {
     patientName: string;
     patientEmail: string;
     patientPhone: string;
+    passport: string;
+    licenseNumber: string;
     appointments: SelectedAppointment[];
     clinicName: string;
     clinicAddress: string;
@@ -137,7 +121,7 @@ const MedicalExamination: React.FC = () => {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Талон профосмотра - ${bookingData.patientName}</title>
+        <title>Справка водительской комиссии - ${bookingData.patientName}</title>
         <style>
           @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
           
@@ -149,23 +133,23 @@ const MedicalExamination: React.FC = () => {
             color: #333;
             background: white;
           }
-          .ticket-container {
+          .certificate-container {
             max-width: 800px;
             margin: 0 auto;
-            border: 2px solid #667eea;
+            border: 3px solid #2c5530;
             border-radius: 15px;
             overflow: hidden;
             box-shadow: 0 10px 30px rgba(0,0,0,0.1);
           }
           .header { 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #2c5530 0%, #4a7c59 100%);
             color: white;
             padding: 30px 20px;
             text-align: center;
           }
           .header h1 { 
             margin: 0 0 10px 0;
-            font-size: 32px;
+            font-size: 28px;
             font-weight: 700;
           }
           .clinic-info {
@@ -182,6 +166,7 @@ const MedicalExamination: React.FC = () => {
             background: #f5f5f5;
             padding: 10px;
             border-radius: 8px;
+            border: 1px solid #ddd;
           }
           .content {
             padding: 30px;
@@ -191,10 +176,10 @@ const MedicalExamination: React.FC = () => {
             padding: 20px;
             border: 2px solid #e0e0e0;
             border-radius: 12px;
-            background: #f8f9ff;
+            background: #f8fff8;
           }
           .info-section h3 { 
-            color: #667eea; 
+            color: #2c5530; 
             margin-top: 0;
             border-bottom: 1px solid #ddd;
             padding-bottom: 10px;
@@ -225,7 +210,7 @@ const MedicalExamination: React.FC = () => {
             padding: 15px;
             margin-bottom: 10px;
             border-radius: 8px;
-            border-left: 4px solid #667eea;
+            border-left: 4px solid #4a7c59;
           }
           .appointment-doctor {
             font-weight: 600;
@@ -245,12 +230,12 @@ const MedicalExamination: React.FC = () => {
             background: #e8f5e8;
             color: #2e7d32;
           }
-          .free-badge {
-            background: #4caf50;
+          .price-badge {
+            background: #4a7c59;
             color: white;
-            padding: 4px 12px;
+            padding: 6px 12px;
             border-radius: 20px;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 600;
           }
           .footer { 
@@ -273,18 +258,32 @@ const MedicalExamination: React.FC = () => {
             right: 20px;
             opacity: 0.1;
             font-size: 48px;
-            color: #667eea;
+            color: #2c5530;
             transform: rotate(-15deg);
             pointer-events: none;
+          }
+          .certificate-number {
+            text-align: center;
+            font-size: 18px;
+            font-weight: 600;
+            color: #2c5530;
+            margin: 15px 0;
+          }
+          .validity {
+            background: #fff8e1;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #ffa000;
+            margin: 20px 0;
           }
           @media print {
             body { 
               margin: 0;
               padding: 0;
             }
-            .ticket-container {
+            .certificate-container {
               box-shadow: none;
-              border: 1px solid #ccc;
+              border: 2px solid #2c5530;
             }
             .watermark {
               display: none;
@@ -293,47 +292,56 @@ const MedicalExamination: React.FC = () => {
         </style>
       </head>
       <body>
-        <div class="ticket-container">
+        <div class="certificate-container">
           <div class="header">
-            <h1>ТАЛОН ПРОФОСМОТРА</h1>
-            <p class="clinic-info">${bookingData.clinicName} • ${bookingData.clinicAddress}</p>
+            <h1>МЕДИЦИНСКАЯ СПРАВКА</h1>
+            <p class="clinic-info">для допуска к управлению транспортными средствами</p>
+            <p class="clinic-info">${bookingData.clinicName}</p>
+          </div>
+          
+          <div class="certificate-number">
+            № ВК-${Date.now().toString().slice(-8)}
           </div>
           
           <div class="barcode">
-            ПРОФОСМОТР № ${Date.now().toString().slice(-6)}
+            ВОДИТЕЛЬСКАЯ КОМИССИЯ ${new Date().getFullYear()}
           </div>
           
           <div class="content">
             <div class="info-section">
-              <h3>Информация о пациенте</h3>
+              <h3>Информация о водителе</h3>
               <div class="info-row">
-                <span class="info-label">Фамилия Имя:</span>
+                <span class="info-label">Фамилия Имя Отчество:</span>
                 <span class="info-value">${bookingData.patientName}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Паспорт:</span>
+                <span class="info-value">${bookingData.passport}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Водительское удостоверение:</span>
+                <span class="info-value">${bookingData.licenseNumber || 'Не указано'}</span>
               </div>
               <div class="info-row">
                 <span class="info-label">Телефон:</span>
                 <span class="info-value">${bookingData.patientPhone}</span>
               </div>
               <div class="info-row">
-                <span class="info-label">Email:</span>
-                <span class="info-value">${bookingData.patientEmail}</span>
-              </div>
-              <div class="info-row">
                 <span class="info-label">Стоимость:</span>
                 <span class="info-value">
-                  <span class="free-badge">БЕСПЛАТНО ПО ПОЛИСУ ОМС</span>
+                  <span class="price-badge">2 500 ₽</span>
                 </span>
               </div>
               <div class="info-row">
                 <span class="info-label">Статус:</span>
                 <span class="info-value">
-                  <span class="status-badge">ЗАПИСЬ ОФОРМЛЕНА</span>
+                  <span class="status-badge">ОЖИДАЕТ ОСМОТРА</span>
                 </span>
               </div>
             </div>
             
             <div class="info-section">
-              <h3>Расписание приемов</h3>
+              <h3>Расписание осмотров</h3>
               <div class="appointment-list">
                 ${bookingData.appointments.map(apt => `
                   <div class="appointment-item">
@@ -346,32 +354,38 @@ const MedicalExamination: React.FC = () => {
               </div>
             </div>
 
+            <div class="validity">
+              <strong>Справка действительна:</strong> 12 месяцев с даты выдачи<br>
+              <strong>Категории:</strong> A, A1, B, B1, BE, M
+            </div>
+
             <div class="info-section">
-              <h3>Важная информация</h3>
-              <p><strong>При себе необходимо иметь:</strong></p>
+              <h3>Требования для получения справки</h3>
               <ul>
-                <li>Паспорт гражданина РФ</li>
-                <li>Полис обязательного медицинского страхования (ОМС)</li>
-                <li>СНИЛС (при наличии)</li>
+                <li>Паспорт гражданина РБ</li>
+                <li>Фотография 3x4 см (матовая)</li>
+                <li>Военный билет (для военнообязанных)</li>
+                <li>Старое водительское удостоверение (при наличии)</li>
               </ul>
-              <p><strong>Приходите за 15 минут до назначенного времени.</strong></p>
+              <p><strong>Приходите за 20 минут до первого приема.</strong></p>
             </div>
           </div>
           
           <div class="footer">
-            <p><strong>Талон сгенерирован:</strong> ${new Date().toLocaleDateString('ru-RU')} ${new Date().toLocaleTimeString('ru-RU')}</p>
-            <p>FaceDiagnosis System - Медицинская диагностика онлайн</p>
+            <p><strong>Справка сгенерирована:</strong> ${new Date().toLocaleDateString('ru-RU')} ${new Date().toLocaleTimeString('ru-RU')}</p>
+            <p>${bookingData.clinicName} - ${bookingData.clinicAddress}</p>
+            <p>Лицензия № ЛО-77-01-019385 от 12.04.2022</p>
           </div>
         </div>
 
-        <div class="watermark">FaceDiagnosis</div>
+        <div class="watermark">ВОДИТЕЛЬСКАЯ КОМИССИЯ</div>
       </body>
       </html>
     `;
   }, []);
 
-  // Создание и отправка PDF талона
-  const generateAndSendExaminationPDF = useCallback(async (bookingData: any) => {
+  // Создание и отправка PDF справки
+  const generateAndSendCommissionPDF = useCallback(async (bookingData: any) => {
     setIsGeneratingPDF(true);
     
     try {
@@ -391,7 +405,7 @@ const MedicalExamination: React.FC = () => {
       }
       
       iframeDoc.open();
-      iframeDoc.write(generateExaminationTicketHTML(bookingData));
+      iframeDoc.write(generateCommissionCertificateHTML(bookingData));
       iframeDoc.close();
       
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -422,10 +436,10 @@ const MedicalExamination: React.FC = () => {
       
       pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
       
-      const fileName = `Профосмотр_${bookingData.patientName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+      const fileName = `Водительская_комиссия_${bookingData.patientName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
       pdf.save(fileName);
       
-      console.log(`Талон профосмотра создан для: ${bookingData.patientEmail}`);
+      console.log(`Справка водительской комиссии создана для: ${bookingData.patientEmail}`);
       
       return true;
     } catch (error) {
@@ -434,9 +448,9 @@ const MedicalExamination: React.FC = () => {
     } finally {
       setIsGeneratingPDF(false);
     }
-  }, [generateExaminationTicketHTML]);
+  }, [generateCommissionCertificateHTML]);
 
-  // Оформление записи на профосмотр
+  // Оформление записи на комиссию
   const handleBooking = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -449,7 +463,7 @@ const MedicalExamination: React.FC = () => {
         clinicAddress: selectedClinicInfo.address
       };
 
-      const pdfGenerated = await generateAndSendExaminationPDF(bookingData);
+      const pdfGenerated = await generateAndSendCommissionPDF(bookingData);
 
       if (pdfGenerated) {
         setIsBooked(true);
@@ -457,15 +471,15 @@ const MedicalExamination: React.FC = () => {
         setTimeout(() => {
           setSelectedClinic('');
           setSelectedAppointments([]);
-          setBookingForm({ name: '', email: ''});
+          setBookingForm({ name: '', email: '' });
           setCurrentStep('clinic');
           setIsBooked(false);
         }, 5000);
       } else {
-        alert('Ошибка при создании талона. Пожалуйста, попробуйте еще раз.');
+        alert('Ошибка при создании справки. Пожалуйста, попробуйте еще раз.');
       }
     }
-  }, [selectedClinicInfo, selectedAppointments, bookingForm, generateAndSendExaminationPDF]);
+  }, [selectedClinicInfo, selectedAppointments, bookingForm, generateAndSendCommissionPDF]);
 
   const handleCloseModal = useCallback(() => {
     setSelectedAppointments([]);
@@ -487,10 +501,10 @@ const MedicalExamination: React.FC = () => {
     <div className={styles.clinicSelection}>
       <div className={styles.packageInfo}>
         <div className={styles.packageHeader}>
-          <Shield size={48} className={styles.packageIcon} />
+          <Car size={48} className={styles.packageIcon} />
           <div>
-            <h2 className={styles.packageTitle}>{examinationPackage.name}</h2>
-            <p className={styles.packageDescription}>{examinationPackage.description}</p>
+            <h2 className={styles.packageTitle}>{commissionPackage.name}</h2>
+            <p className={styles.packageDescription}>{commissionPackage.description}</p>
           </div>
         </div>
         
@@ -499,22 +513,22 @@ const MedicalExamination: React.FC = () => {
             <Clock size={20} />
             <div>
               <strong>Продолжительность:</strong>
-              <span>{examinationPackage.duration}</span>
+              <span>{commissionPackage.duration}</span>
             </div>
           </div>
           <div className={styles.detailItem}>
             <Award size={20} />
             <div>
               <strong>Стоимость:</strong>
-              <span className={styles.freePrice}>{examinationPackage.price}</span>
+              <span className={styles.price}>{commissionPackage.price}</span>
             </div>
           </div>
         </div>
 
         <div className={styles.benefits}>
-          <h3>Что входит в профосмотр:</h3>
+          <h3>Что входит в комиссию:</h3>
           <div className={styles.benefitsGrid}>
-            {examinationPackage.benefits.map((benefit, index) => (
+            {commissionPackage.benefits.map((benefit, index) => (
               <div key={index} className={styles.benefitItem}>
                 <CheckCircle size={16} />
                 <span>{benefit}</span>
@@ -522,45 +536,43 @@ const MedicalExamination: React.FC = () => {
             ))}
           </div>
         </div>
+
+        <div className={styles.requirements}>
+          <h3>Необходимые документы:</h3>
+          <div className={styles.requirementsList}>
+            {commissionPackage.requirements.map((requirement, index) => (
+              <div key={index} className={styles.requirementItem}>
+                <CheckCircle size={16} />
+                <span>{requirement}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className={styles.clinicsSection}>
-        <h3 className={styles.sectionTitle}>Выберите поликлинику для прохождения осмотра:</h3>
-        <button 
-            className={styles.mapButton}
-            onClick={handleOpenMap}
-          >
-            <MapPin size={20} />
-            Выбрать на карте
-          </button>
         <div className={styles.clinicsGrid}>
-          {mockClinics.map(clinic => (
+          
             <div 
-              key={clinic.id} 
+              
               className={styles.clinicCard}
-              onClick={() => handleClinicSelect(clinic.id)}
             >
               <div className={styles.clinicHeader}>
-                <h4 className={styles.clinicName}>{clinic.name}</h4>
-                <div className={styles.clinicCity}>{clinic.city}</div>
+                <h4 className={styles.clinicName}>24-поликлиника поликлиника спецмедосмотров </h4>
+                <div className={styles.clinicCity}></div>
               </div>
               <div className={styles.clinicAddress}>
                 <MapPin size={16} />
-                <span>{clinic.address}</span>
+                <span> ул. Филимонова 53, Минск</span>
               </div>
-              <div className={styles.selectClinicButton}>
-                Выбрать эту поликлинику
+              <div className={styles.clinicPrice}>
+                Стоимость: <strong> 56 BYN</strong>
               </div>
+              
             </div>
-          ))}
+          
         </div>
       </div>
-      <YandexMapModal
-        isOpen={isMapModalOpen}
-        onClose={handleCloseMap}
-        clinics={mockClinics}
-        onClinicSelect={handleClinicSelectFromMap}
-      />
     </div>
   );
 
@@ -572,14 +584,14 @@ const MedicalExamination: React.FC = () => {
       <div className={styles.doctorsSelection}>
         <div className={styles.selectionHeader}>
           <div className={styles.clinicInfo}>
-            <h2>Выберите время приема у специалистов</h2>
-            <p>Поликлиника: <strong>{selectedClinicInfo.name}</strong> • {selectedClinicInfo.address}</p>
+            <h2>Выберите время осмотра у специалистов</h2>
+            <p>Медицинский центр: <strong>{selectedClinicInfo.name}</strong> • {selectedClinicInfo.address}</p>
           </div>
-          <p className={styles.instruction}>Необходимо выбрать время у {examinationPackage.requiredDoctors.length} врачей</p>
+          <p className={styles.instruction}>Необходимо выбрать время у {commissionPackage.requiredDoctors.length} врачей</p>
         </div>
 
         <div className={styles.doctorsGrid}>
-          {examinationDoctors.map(doctor => {
+          {commissionDoctors.map(doctor => {
             const nearestAppointments = getNearestAppointments(doctor.id);
             const selectedAppointment = selectedAppointments.find(apt => apt.doctor.id === doctor.id);
 
@@ -594,7 +606,9 @@ const MedicalExamination: React.FC = () => {
                   <div className={styles.doctorDetails}>
                     <h3 className={styles.doctorName}>{doctor.name}</h3>
                     <div className={styles.doctorSpecialty}>{doctor.specialty}</div>
-                  
+                    {doctor.specialty === 'Психиатр' || doctor.specialty === 'Нарколог' ? (
+                      <div className={styles.specialNote}>Обязательный специалист</div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -642,7 +656,7 @@ const MedicalExamination: React.FC = () => {
         <div className={styles.selectionFooter}>
           <div className={styles.progress}>
             <div className={styles.progressText}>
-              Выбрано: <strong>{selectedAppointments.length}</strong> из <strong>{examinationPackage.requiredDoctors.length}</strong> специалистов
+              Выбрано: <strong>{selectedAppointments.length}</strong> из <strong>{commissionPackage.requiredDoctors.length}</strong> специалистов
             </div>
             {!isReadyForBooking && (
               <div className={styles.progressWarning}>
@@ -666,26 +680,29 @@ const MedicalExamination: React.FC = () => {
   const renderBooking = () => (
     <div className={styles.bookingForm}>
       <div className={styles.bookingHeader}>
-        <h2>Оформление записи на профосмотр</h2>
-        <p>Проверьте выбранные приемы и заполните данные</p>
+        <h2>Оформление водительской комиссии</h2>
+        <p>Заполните данные для получения медицинской справки</p>
       </div>
 
       <div className={styles.bookingSummary}>
         <div className={styles.summaryCard}>
-          <h3>Информация о профосмотре</h3>
+          <h3>Информация о комиссии</h3>
           <div className={styles.summaryItem}>
-            <strong>Поликлиника:</strong> {selectedClinicInfo?.name}
+            <strong>Медицинский центр:</strong> {selectedClinicInfo?.name}
           </div>
           <div className={styles.summaryItem}>
             <strong>Адрес:</strong> {selectedClinicInfo?.address}
           </div>
           <div className={styles.summaryItem}>
-            <strong>Стоимость:</strong> <span className={styles.freeBadge}>Бесплатно по полису ОМС</span>
+            <strong>Стоимость:</strong> <span className={styles.priceBadge}>2 500 ₽</span>
+          </div>
+          <div className={styles.summaryItem}>
+            <strong>Действительна:</strong> 12 месяцев
           </div>
         </div>
 
         <div className={styles.selectedAppointments}>
-          <h3>Выбранные приемы:</h3>
+          <h3>Выбранные осмотры:</h3>
           {selectedAppointments.map(({ appointment, doctor }) => (
             <div key={doctor.id} className={styles.appointmentSummary}>
               <div className={styles.appointmentDoctor}>
@@ -706,20 +723,22 @@ const MedicalExamination: React.FC = () => {
       <form onSubmit={handleBooking} className={styles.form}>
         <div className={styles.formGrid}>
           <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Фамилия и Имя *</label>
+            <label className={styles.formLabel}>Фамилия Имя Отчество *</label>
             <input
               type="text"
               className={styles.formInput}
-              placeholder="Иван Иванов"
+              placeholder="Иванов Иван Иванович"
               value={bookingForm.name}
               onChange={(e) => setBookingForm({ ...bookingForm, name: e.target.value })}
               required
             />
           </div>
+        </div>
 
+         
 
           <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Email для получения талона *</label>
+            <label className={styles.formLabel}>Email для получения справки *</label>
             <input
               type="email"
               className={styles.formInput}
@@ -729,10 +748,12 @@ const MedicalExamination: React.FC = () => {
               required
             />
           </div>
-        </div>
+
+      
 
         <div className={styles.formNote}>
-          <strong>Важно:</strong> При себе необходимо иметь паспорт и полис ОМС. Приходите за 15 минут до назначенного времени.
+          <strong>Важно:</strong> При себе необходимо иметь паспорт, фотографию 3x4 см и военный билет (для военнообязанных). 
+          Приходите за 20 минут до первого приема. Оплата производится в медицинском центре перед осмотром.
         </div>
 
         <div className={styles.formActions}>
@@ -748,7 +769,7 @@ const MedicalExamination: React.FC = () => {
             className={styles.submitButton}
             disabled={isGeneratingPDF}
           >
-            {isGeneratingPDF ? 'Генерация талона...' : 'Записаться на профосмотр'}
+            {isGeneratingPDF ? 'Генерация справки...' : 'Записаться на комиссию'}
           </button>
         </div>
       </form>
@@ -766,13 +787,13 @@ const MedicalExamination: React.FC = () => {
             </button>
           )}
           <div className={styles.titleSection}>
-            <Stethoscope size={32} />
+            <Car size={32} />
             <div>
-              <h1 className={styles.title}>Профилактический осмотр</h1>
+              <h1 className={styles.title}>Водительская медицинская комиссия</h1>
               <p className={styles.subtitle}>
-                {currentStep === 'clinic' && 'Выберите поликлинику для прохождения осмотра'}
-                {currentStep === 'doctors' && 'Выберите время приема у специалистов'}
-                {currentStep === 'booking' && 'Оформление записи'}
+                {currentStep === 'clinic' && 'Выберите медицинский центр для прохождения комиссии'}
+                {currentStep === 'doctors' && 'Выберите время осмотра у специалистов'}
+                {currentStep === 'booking' && 'Оформление записи на комиссию'}
               </p>
             </div>
           </div>
@@ -792,22 +813,24 @@ const MedicalExamination: React.FC = () => {
             <div className={styles.successMessage}>
               <div className={styles.successTitle}>
                 <CheckCircle size={48} />
-                Запись на профосмотр оформлена!
+                Запись на водительскую комиссию оформлена!
               </div>
               <p className={styles.successText}>
-                Талон отправлен на {bookingForm.email} и загружен на ваше устройство
+                Предварительная справка отправлена на {bookingForm.email} и загружена на ваше устройство
               </p>
               <div className={styles.successDetails}>
                 <div className={styles.detailItem}>
-                  <strong>Поликлиника:</strong> {selectedClinicInfo?.name}
+                  <strong>Медицинский центр:</strong> {selectedClinicInfo?.name}
                 </div>
                 <div className={styles.detailItem}>
-                  <strong>Пациент:</strong> {bookingForm.name}
+                  <strong>Водитель:</strong> {bookingForm.name}
                 </div>
-               
+                <div className={styles.detailItem}>
+                  <strong>Стоимость:</strong> 2 500 ₽ (оплата в центре)
+                </div>
               </div>
               <div className={styles.appointmentsReminder}>
-                <h4>Не забудьте посетить:</h4>
+                <h4>График осмотров:</h4>
                 {selectedAppointments.map(({ appointment, doctor }) => (
                   <div key={doctor.id} className={styles.reminderItem}>
                     <strong>{doctor.name}</strong> ({doctor.specialty}) - {new Date(appointment.date).toLocaleDateString('ru-RU')} в {appointment.time}
@@ -815,7 +838,7 @@ const MedicalExamination: React.FC = () => {
                 ))}
               </div>
               <p className={styles.successNote}>
-                При себе необходимо иметь: паспорт, полис ОМС, СНИЛС
+                <strong>При себе необходимо иметь:</strong> паспорт, фотографию 3x4 см, военный билет (для военнообязанных)
               </p>
             </div>
           </div>
@@ -825,4 +848,4 @@ const MedicalExamination: React.FC = () => {
   );
 };
 
-export default MedicalExamination;
+export default DriverCommission;
